@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+stock_price_rnn.h5
+stock_price_rnn.keras
+
+.DS_Store

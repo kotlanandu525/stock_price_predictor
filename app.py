@@ -1,8 +1,9 @@
 import streamlit as st
 import numpy as np
-import joblib
 import pandas as pd
 import plotly.graph_objects as go
+import joblib
+import os
 from tensorflow.keras.models import load_model
 
 # -----------------------------
@@ -15,17 +16,29 @@ st.set_page_config(
 )
 
 # -----------------------------
-# LOAD MODEL
+# LOAD MODEL & SCALER
 # -----------------------------
-import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-MODEL_PATH = os.path.join(
-    os.path.dirname(__file__),
-    "stock_price_rnn.h5"
-)
+MODEL_PATH = os.path.join(BASE_DIR, "stock_price_rnn.h5")
+SCALER_PATH = os.path.join(BASE_DIR, "scaler.pkl")
 
-model = load_model(MODEL_PATH, compile=False)
-scaler = joblib.load("scaler.pkl")
+model = None
+scaler = None
+
+try:
+    if os.path.exists(MODEL_PATH):
+        model = load_model(MODEL_PATH, compile=False)
+    else:
+        st.error("❌ stock_price_rnn.h5 not found")
+
+    if os.path.exists(SCALER_PATH):
+        scaler = joblib.load(SCALER_PATH)
+    else:
+        st.error("❌ scaler.pkl not found")
+
+except Exception as e:
+    st.error(f"Loading Error: {e}")
 
 # -----------------------------
 # CUSTOM CSS
@@ -33,42 +46,23 @@ scaler = joblib.load("scaler.pkl")
 st.markdown("""
 <style>
 
-.main {
-    background-color: #0e1117;
-}
-
-.hero {
-    background: linear-gradient(90deg,#1f77ff,#00d4ff);
-    padding: 2rem;
-    border-radius: 20px;
+.hero{
+    background:linear-gradient(90deg,#1f77ff,#00d4ff);
+    padding:2rem;
+    border-radius:20px;
     text-align:center;
     color:white;
     margin-bottom:20px;
 }
 
-.hero h1{
-    font-size:3rem;
-    margin-bottom:10px;
-}
-
-.hero p{
-    font-size:1.2rem;
-}
-
 .prediction-card{
-    background: linear-gradient(135deg,#00c853,#64dd17);
+    background:linear-gradient(135deg,#00c853,#64dd17);
     padding:25px;
     border-radius:20px;
     text-align:center;
     color:white;
     font-size:32px;
     font-weight:bold;
-}
-
-.metric-box{
-    background-color:#1e222d;
-    padding:15px;
-    border-radius:15px;
 }
 
 </style>
@@ -88,27 +82,22 @@ st.markdown("""
 # SIDEBAR
 # -----------------------------
 with st.sidebar:
-
     st.title("📊 Project Details")
 
-    st.success("""
-    Dataset:
-    ADANIPORTS.csv
-    """)
+    st.success("Dataset: ADANIPORTS.csv")
 
     st.info("""
-    Model: SimpleRNN
+Model: SimpleRNN
 
-    Input:
-    Previous 30 Days Prices
+Input:
+Previous 30 Days Prices
 
-    Output:
-    Next Day Price
-    """)
+Output:
+Next Day Price
+""")
 
     st.markdown("---")
 
-    st.write("Built using:")
     st.write("✔ TensorFlow")
     st.write("✔ Streamlit")
     st.write("✔ Plotly")
@@ -135,103 +124,88 @@ predict = st.button(
 # -----------------------------
 if predict:
 
-    try:
-
-        prices = list(
-            map(float, user_input.split(","))
+    if model is None or scaler is None:
+        st.error(
+            "Model or scaler file is missing. Upload stock_price_rnn.h5 and scaler.pkl to GitHub."
         )
 
-        if len(prices) != 30:
-            st.error(
-                "Please enter exactly 30 stock prices."
-            )
+    else:
 
-        else:
+        try:
 
-            arr = np.array(prices).reshape(-1,1)
+            prices = [float(x.strip()) for x in user_input.split(",")]
 
-            scaled = scaler.transform(arr)
+            if len(prices) != 30:
+                st.error("Please enter exactly 30 stock prices.")
 
-            X = scaled.reshape(1,30,1)
+            else:
 
-            prediction = model.predict(
-                X,
-                verbose=0
-            )
+                arr = np.array(prices).reshape(-1, 1)
 
-            predicted_price = scaler.inverse_transform(
-                prediction
-            )[0][0]
+                scaled = scaler.transform(arr)
 
-            # Metrics
-            col1,col2,col3 = st.columns(3)
+                X = scaled.reshape(1, 30, 1)
 
-            col1.metric(
-                "Input Days",
-                "30"
-            )
+                prediction = model.predict(X, verbose=0)
 
-            col2.metric(
-                "Model",
-                "SimpleRNN"
-            )
+                predicted_price = scaler.inverse_transform(
+                    prediction
+                )[0][0]
 
-            col3.metric(
-                "Predicted Price",
-                f"₹ {predicted_price:.2f}"
-            )
+                col1, col2, col3 = st.columns(3)
 
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            # Prediction Card
-            st.markdown(
-                f"""
-                <div class='prediction-card'>
-                🎯 Predicted Next Day Price<br>
-                ₹ {predicted_price:.2f}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            # Trend Chart
-            st.subheader("📊 Previous 30 Days Trend")
-
-            df = pd.DataFrame({
-                "Day": list(range(1,31)),
-                "Price": prices
-            })
-
-            fig = go.Figure()
-
-            fig.add_trace(
-                go.Scatter(
-                    x=df["Day"],
-                    y=df["Price"],
-                    mode="lines+markers",
-                    name="Stock Price"
+                col1.metric("Input Days", "30")
+                col2.metric("Model", "SimpleRNN")
+                col3.metric(
+                    "Predicted Price",
+                    f"₹ {predicted_price:.2f}"
                 )
-            )
 
-            fig.update_layout(
-                height=500,
-                template="plotly_dark",
-                xaxis_title="Days",
-                yaxis_title="Price",
-                title="Stock Closing Price Trend"
-            )
+                st.markdown(
+                    f"""
+                    <div class='prediction-card'>
+                    🎯 Predicted Next Day Price<br>
+                    ₹ {predicted_price:.2f}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
+                st.subheader("📊 Previous 30 Days Trend")
 
-            st.balloons()
+                df = pd.DataFrame({
+                    "Day": range(1, 31),
+                    "Price": prices
+                })
 
-    except Exception as e:
-        st.error(f"Error: {e}")
+                fig = go.Figure()
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=df["Day"],
+                        y=df["Price"],
+                        mode="lines+markers",
+                        name="Stock Price"
+                    )
+                )
+
+                fig.update_layout(
+                    height=500,
+                    template="plotly_dark",
+                    title="Stock Closing Price Trend",
+                    xaxis_title="Days",
+                    yaxis_title="Price"
+                )
+
+                st.plotly_chart(
+                    fig,
+                    use_container_width=True
+                )
+
+                st.balloons()
+
+        except Exception as e:
+            st.error(f"Error: {e}")
 
 # -----------------------------
 # FOOTER

@@ -17,11 +17,14 @@ st.set_page_config(
 # -----------------------------
 # LOAD MODEL
 # -----------------------------
-model = load_model(
-    "stock_price_rnn.h5",
-    compile=False
+import os
+
+MODEL_PATH = os.path.join(
+    os.path.dirname(__file__),
+    "stock_price_rnn.h5"
 )
 
+model = load_model(MODEL_PATH, compile=False)
 scaler = joblib.load("scaler.pkl")
 
 # -----------------------------
